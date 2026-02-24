@@ -174,6 +174,16 @@ Total duration: **~9 weeks**
 - Backup and recovery planning for attendance/payroll data
 - Structured testing before final release
 
+### 6.5 Deployment Strategy (AWS)
+- **Hosting**: AWS (Spring Boot services deployed via AWS Lambda or EC2/ECS as per module needs)
+- **Database**: Amazon RDS (MySQL/PostgreSQL)
+- **API Layer**: Amazon API Gateway
+- **Authentication/Secrets**: AWS Secrets Manager + IAM role-based access
+- **Storage/Logs**: Amazon S3 for artifacts and CloudWatch for logs/monitoring
+- **CI/CD**: Git-based pipeline with build, test, and deploy stages
+
+**Deployment Outcome**: Scalable, secure, and production-ready cloud deployment aligned with enterprise practices.
+
 ---
 
 ## 7) Conclusion
@@ -182,8 +192,206 @@ The HR Management Portal is a practical, scalable, and high-impact project addre
 ---
 
 ## 8) Annexure (Optional for Hard Copy)
-- Use case diagrams
-- ER diagram and schema snapshots
-- API list and sample requests/responses
-- Test cases and sample outputs
-- Gantt chart for schedule tracking
+
+### 8.1 Use Case Diagrams
+
+```mermaid
+flowchart LR
+		E[Employee]
+		M[Manager]
+		H[HR Admin]
+		S[(HR Management Portal)]
+
+		E --> U1[Login]
+		E --> U2[Punch In/Out]
+		E --> U3[Apply Leave]
+		E --> U4[Request Attendance Correction]
+		E --> U5[View Salary Slip]
+
+		M --> U6[Approve/Reject Leave]
+		M --> U7[Approve/Reject Corrections]
+		M --> U8[View Team Attendance]
+
+		H --> U9[Manage Onboarding]
+		H --> U10[Configure Shifts/Policies]
+		H --> U11[Run Monthly Reports]
+		H --> U12[Process Payroll]
+
+		U1 --> S
+		U2 --> S
+		U3 --> S
+		U4 --> S
+		U5 --> S
+		U6 --> S
+		U7 --> S
+		U8 --> S
+		U9 --> S
+		U10 --> S
+		U11 --> S
+		U12 --> S
+```
+
+### 8.2 ER Diagram and Schema Snapshot
+
+```mermaid
+erDiagram
+		EMPLOYEES ||--o{ ATTENDANCE : marks
+		SHIFTS ||--o{ EMPLOYEES : assigned_to
+		ATTENDANCE ||--o{ BREAKS : has
+		ATTENDANCE ||--o{ ATTENDANCE_CORRECTIONS : requested_for
+		EMPLOYEES ||--o{ ATTENDANCE_CORRECTIONS : raises
+		EMPLOYEES ||--o{ OVERTIME_REQUESTS : submits
+		HOLIDAYS ||--o{ ATTENDANCE : influences
+		EMPLOYEES ||--o{ MONTHLY_ATTENDANCE_SUMMARY : summarized_in
+
+		EMPLOYEES {
+			string employee_id PK
+			string first_name
+			string last_name
+			string email
+			int shift_id FK
+		}
+		SHIFTS {
+			int shift_id PK
+			string shift_name
+			time start_time
+			time end_time
+		}
+		ATTENDANCE {
+			bigint attendance_id PK
+			string employee_id FK
+			date attendance_date
+			timestamp punch_in_time
+			timestamp punch_out_time
+			decimal total_hours
+			string status
+		}
+```
+
+**Schema Snapshot (Key Tables)**
+- `employees(employee_id, first_name, last_name, email, shift_id, manager_id, is_active)`
+- `shifts(shift_id, shift_name, start_time, end_time, grace_period_minutes, full_day_hours)`
+- `attendance(attendance_id, employee_id, attendance_date, punch_in_time, punch_out_time, total_hours, overtime_hours, status)`
+- `breaks(break_id, attendance_id, break_start_time, break_end_time, duration_minutes)`
+- `attendance_corrections(correction_id, attendance_id, employee_id, requested_punch_in, requested_punch_out, reason, status)`
+- `monthly_attendance_summary(summary_id, employee_id, year, month, present_days, absent_days, total_hours_worked)`
+
+### 8.3 API List and Sample Requests/Responses
+
+**Core APIs**
+- `POST /api/auth/login`
+- `POST /api/attendance/punch-in`
+- `POST /api/attendance/punch-out`
+- `GET /api/attendance/status?employeeId=EMP001`
+- `POST /api/corrections/request`
+- `PUT /api/corrections/{correctionId}/approve`
+- `GET /api/reports/employee/{employeeId}/summary/{year}/{month}`
+
+**Sample 1: Punch In**
+
+Request:
+```http
+POST /api/attendance/punch-in
+Content-Type: application/json
+Authorization: Bearer <jwt-token>
+
+{
+	"employeeId": "EMP001",
+	"punchInTime": "2026-02-24T09:10:00",
+	"location": "Head Office",
+	"device": "Web"
+}
+```
+
+Response:
+```json
+{
+	"success": true,
+	"message": "Punch in recorded successfully",
+	"attendanceId": 12045,
+	"status": "PRESENT"
+}
+```
+
+**Sample 2: Attendance Status**
+
+Request:
+```http
+GET /api/attendance/status?employeeId=EMP001
+Authorization: Bearer <jwt-token>
+```
+
+Response:
+```json
+{
+	"employeeId": "EMP001",
+	"attendanceDate": "2026-02-24",
+	"punchedIn": true,
+	"punchedOut": false,
+	"punchInTime": "2026-02-24T09:10:00",
+	"currentStatus": "WORKING"
+}
+```
+
+### 8.4 Test Cases and Sample Outputs
+
+| Test ID | Module | Test Scenario | Input | Expected Output | Sample Result |
+|---|---|---|---|---|---|
+| TC-01 | Auth | Valid login | Valid credentials | JWT token generated | Pass |
+| TC-02 | Attendance | Punch in once per day | EMP001 punch-in request | Attendance record created | Pass |
+| TC-03 | Attendance | Duplicate punch-in prevention | Second punch-in same day | Validation error message | Pass |
+| TC-04 | Breaks | Break start/end calculation | Break start + end | Duration stored in minutes | Pass |
+| TC-05 | Corrections | Request correction within 7 days | Correction payload | Status set to PENDING | Pass |
+| TC-06 | Manager Flow | Approve correction | Approve API call | Attendance updated, status APPROVED | Pass |
+| TC-07 | Reports | Monthly summary generation | Employee + month | Present/Absent/Hours summary | Pass |
+| TC-08 | Security | API without token | No auth header | 401 Unauthorized | Pass |
+
+**Sample Test Output (Illustrative)**
+```text
+[INFO] Running AttendanceServiceTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Running CorrectionServiceTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+```
+
+### 8.5 Gantt Chart for Schedule Tracking
+
+```mermaid
+gantt
+		title HR Management Portal - 9 Week Plan
+		dateFormat  YYYY-MM-DD
+		section Planning
+		Requirement Analysis           :a1, 2026-02-24, 7d
+		section Design
+		DB + API + UI Design           :a2, after a1, 7d
+		section Development
+		Auth + Base Setup              :a3, after a2, 7d
+		Leave + Onboarding             :a4, after a3, 7d
+		Attendance + Corrections       :a5, after a4, 7d
+		Salary Management              :a6, after a5, 7d
+		section QA/Integration
+		Integration + Testing          :a7, after a6, 10d
+		section Closure
+		Documentation + Final Demo     :a8, after a7, 4d
+```
+
+### 8.6 AWS Deployment Architecture Snapshot
+
+```mermaid
+flowchart TD
+		U[Users] --> CF[CloudFront]
+		CF --> S3[S3 Static Frontend]
+		U --> APIGW[API Gateway]
+		APIGW --> APP[Spring Boot Service on AWS Lambda/EC2]
+		APP --> RDS[(Amazon RDS MySQL/PostgreSQL)]
+		APP --> CW[CloudWatch Logs]
+		APP --> SM[Secrets Manager]
+```
+
+**Environment (AWS) – Proposed**
+- `DB_HOST=<rds-endpoint>`
+- `DB_PORT=3306`
+- `DB_NAME=hr_management`
+- `JWT_SECRET=<stored-in-secrets-manager>`
+- `AWS_REGION=ap-south-1`
